@@ -1,0 +1,24 @@
+a-scene {
+    height: 600px;
+    /* width: 600px; */
+}
+
+video {
+    display: none !important;
+}
+
+#camera-btn {
+    color: #ffffff;
+    background-color: #FBB02D;
+    font-size: small;
+    width: auto;
+
+}
+
+#control_buttons {
+    position: absolute;
+    display: flex;
+    bottom: 3%;
+    left: 50%;
+    transform: translateX(-50%);
+}
