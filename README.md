@@ -9,7 +9,9 @@ The two app pages can be loaded without the file extensions
 * The "backend" support user is `app/instructor.html`
 * The "frontend" client AR user is `app/passthrough_ar.html`
 
-In addition to the web app pages, there are supporting components that have to be run separately.9
+In addition to the web app pages, there are supporting components that have to be run separately.
+1. `supporting_components/database` contains the JavaScript server that the web app communicates with to store the data
+2. `supporting_components/stream_capture` can watch and listen to the client streams in CoWebXR using `stream_capture.html`, these are then saved into small chunks which are then analysed in a Python script `detect.py`, and the recognised results returned to the user  
 
 
 ### Installation and running
@@ -69,8 +71,38 @@ certificates: {
           >
 ```
 
-### Running the CoWebXR system
+4. (Optional) You can choose to use a local or cloud MongoDB database to store the data for the marker codes and their corresponding content
+
+5. Install the dependencies for the Python analysis application 
+
+6. Run npm install on the root of the `cowebxr` directory
 
  ```sh
 npm install  # Install dependencies
+```
+
+
+### Running the CoWebXR system
+
+The following need to be run to get the system working
+
+1. The main WebXR server application
+
+```sh
+cd server
+sudo node server.js
+```
+
+2. Janus if it is not already running
+```sh
+janus
+```
+
+3. Similarly, MongoDB if not already running
+
+4. The MongoDB database connector web app
+
+```sh
+cd supporting_components/database
+sudo node main.js
 ```

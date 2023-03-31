@@ -8,7 +8,7 @@ const express = require("express");           // web framework external module
 const socketIo = require("socket.io");        // web socket external module
 const easyrtc = require("open-easyrtc");      // EasyRTC external module
 
-//easyrtc.setOption("logLevel", "debug");
+easyrtc.setOption("logLevel", "debug");
 
 // Set process name
 process.title = "cowebxr_web_server";
@@ -18,8 +18,9 @@ const port = process.env.PORT || 443;
 
 // Setup and configure Express https server.
 const app = express();
-app.use(express.static(path.resolve(__dirname, "..", "app"), 
+app.use(express.static(path.resolve(__dirname, "..", "app"),
   {index:false,extensions:['html']}));
+app.use("/dist", express.static(path.resolve(__dirname, "..", "dist")));
 app.use(cors()); 
 
 // Serve the example and build the bundle in development.

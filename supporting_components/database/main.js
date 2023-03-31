@@ -1,8 +1,8 @@
 var fs = require('fs');
 var http = require('http');
 var https = require('https');
-var privateKey = fs.readFileSync('/etc/letsencrypt/live/5gwebxr.com/privkey.pem', 'utf8');
-var certificate = fs.readFileSync('/etc/letsencrypt/live/5gwebxr.com/cert.pem', 'utf8');
+var privateKey = fs.readFileSync('/etc/letsencrypt/live/cowebxr.com/privkey.pem', 'utf8');
+var certificate = fs.readFileSync('/etc/letsencrypt/live/cowebxr.com/cert.pem', 'utf8');
 
 var credentials = { key: privateKey, cert: certificate };
 const express = require('express');
@@ -27,7 +27,7 @@ function objectify_data(data) {
 async function user_insert(user) {
 	try {
 		await client.connect();
-		const database = client.db("5gwebxr");
+		const database = client.db("cowebxr");
 		const user_details = database.collection("users");
 
 		const user_json = objectify_form(user);
@@ -55,7 +55,7 @@ function errorFunc(error) {
 async function user_retrieve() {
 	try {
 		await client.connect();
-		const database = client.db("5gwebxr");
+		const database = client.db("cowebxr");
 		const user_details = database.collection("users");
 
 		const result = await user_details.find().toArray();
@@ -75,7 +75,7 @@ async function user_retrieve() {
 async function marker_retrieve(types_to_retrieve) {
 	try {
 		await client.connect();
-		const database = client.db("5gwebxr");
+		const database = client.db("cowebxr");
 		const markers_retrieved = database.collection("markers");
 
 		if (types_to_retrieve == "ids") {
@@ -106,7 +106,7 @@ async function marker_retrieve(types_to_retrieve) {
 async function marker_update(data) {
 	try {
 		await client.connect();
-		const database = client.db("5gwebxr");
+		const database = client.db("cowebxr");
 		const marker_details = database.collection("markers");
 
 		// create a filter for the marker to update - selecting which by using new marker value
@@ -131,7 +131,7 @@ async function marker_update(data) {
 async function marker_insert(marker) {
 	try {
 		await client.connect();
-		const database = client.db("5gwebxr");
+		const database = client.db("cowebxr");
 		const marker_details = database.collection("markers");
 
 		const result = await marker_details.insertOne(marker);
@@ -144,7 +144,7 @@ async function marker_insert(marker) {
 async function marker_delete(marker) {
 	try {
 		await client.connect();
-		const database = client.db("5gwebxr");
+		const database = client.db("cowebxr");
 		const marker_details = database.collection("markers");
 
 		const query = { marker_id: marker.marker_id };
@@ -159,7 +159,7 @@ async function marker_delete(marker) {
 async function recognition_insert(results) {
 	try {
 		await client.connect();
-		const database = client.db("5gwebxr");
+		const database = client.db("cowebxr");
 		const result_details = database.collection("recognitions");
 
 		const result = await result_details.insertOne(results);
@@ -172,7 +172,7 @@ async function recognition_insert(results) {
 async function recongition_retrieve(client_id) {
 	try {
 		await client.connect();
-		const database = client.db("5gwebxr");
+		const database = client.db("cowebxr");
 		const result_details = database.collection("recognitions");
 
 		if (types_to_retrieve == "ids") {

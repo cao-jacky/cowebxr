@@ -36,6 +36,7 @@
             NAF.connection.broadcastData('unreliableBroadcast', '');
 
             var clients = NAF.connection.getConnectedClients();
+            console.log(clients);
 
             var firstClient;
             for (firstClient in clients) break;
@@ -46,6 +47,85 @@
             NAF.connection.sendDataGuaranteed(firstClient, 'reliableSend', '');
             NAF.connection.sendData(firstClient, 'unreliableSend', '');
         }
+
+        function pushData(senderId, dataType, data, targetObj) {
+            console.log(data);
+            // console.log(data[0].results.names);
+
+            // const returned_data = JSON.parse(this.responseText);
+            // const recognition_results = JSON.parse(returned_data[0].results);
+
+            const yolo_width = 480;
+            const yolo_height = 640;
+            
+            const win_width = window.innerWidth;
+            const win_height = window.innerHeight;
+
+            const recognition_results = data[0].results
+            const num_rr = recognition_results.bb.length;
+
+            // // console.log("window size " + window.innerWidth + "x" + window.innerHeight);
+
+            if (num_rr > 0) {
+                var textElement = document.getElementById("recognition");
+                textElement.innerHTML = '';
+                for (var i = 0; i < num_rr; i++) {
+                    const curr_label = recognition_results.names[i];
+                    const curr_res = recognition_results.bb[i];
+
+                    const x_min = curr_res[0];
+                    const y_min = curr_res[1];
+                    const box_width = curr_res[2];
+                    const box_height = curr_res[3];
+
+                    console.log(curr_res, curr_label);
+
+                    const x_ratio = win_width / yolo_width;
+                    const y_ratio = win_height / yolo_height;
+
+                    const x_centre = (x_min + box_width) / 2;
+                    const y_centre = (y_min + box_height) / 2;
+
+                    const x_cen_new = (x_centre*x_ratio) - x_ratio;
+                    const y_cen_new = (y_centre*y_ratio) - y_ratio;
+
+                    var res_box = document.createElement('a-entity');
+                    res_box.setAttribute('geometry', {
+                        primitive: 'plane',
+                        height: box_height,
+                        width: box_width
+                    });
+                    // res_box.setAttribute('rotation', {x: 0, y: 0, z: -90});
+                    res_box.setAttribute('material', {
+                        opacity: 0.5,
+                        transparent: true
+                    });
+                    // res_box.object3D.position.set((x_min_norm*x_rat)-1, (y_min_norm*y_rat)-1.5, -3);
+                    res_box.setAttribute('position', { x: x_centre-0.5, y: y_centre-0.5, z: -3.5 });
+
+                    console.log(x_cen_new, y_cen_new);
+
+                    // console.log(x_min + " " + x_rat + " " + x_max);
+
+                    var new_el = document.createElement('a-entity');
+                    new_el.setAttribute('text', {
+                        value: curr_label,
+                        height: 2,
+                        width: 2
+                    });
+                    new_el.setAttribute('id', "recognition");
+                    new_el.setAttribute('position', { x: 1, y: 0, z: 0 });
+                    res_box.appendChild(new_el);
+                    textElement.appendChild(res_box);
+
+                }
+            }
+    
+        }
+
+        // function receiveData() {
+        //     NAF.connection.subscribeToDataChannel('u', pushData);
+        // }
     </script>
 
 </head>
@@ -88,12 +168,37 @@
 
         </a-assets>
 
-        <a-camera look-controls="enabled: false" wasd-controls="enabled: false" position="0 0 0" fit>
+        <a-camera look-controls="enabled: false" wasd-controls="enabled: false" position="0.5 0.5 -3.5" fit id="mainCamera">
             <a-entity id="player" networked="template:#avatar-template;attachTemplateToLocal:false;" position="0 -6 -1"
                 rotation="0 0 0" onhover>
             </a-entity>
-
         </a-camera>
+
+        <a-plane position="-2.5 -2 -5" id="testplane"
+                material="side: double; color: #000000; transparent: false; opacity: 0.5" height="0.1" width="0.1"
+                depth="0.01">
+        </a-plane>
+
+        <a-plane position="0 0 -5" id="testplane2"
+                material="side: double; color: #000000; transparent: false; opacity: 0.5" height="0.1" width="0.1"
+                depth="0.01">
+        </a-plane>
+
+        <a-plane position="0 1 -5" id="testplane2"
+                material="side: double; color: #000000; transparent: false; opacity: 0.5" height="0.1" width="0.1"
+                depth="0.01">
+        </a-plane>
+
+        <a-plane position="1 0 -5" id="testplane2"
+                material="side: double; color: #000000; transparent: false; opacity: 0.5" height="0.1" width="0.1"
+                depth="0.01">
+        </a-plane>
+        
+        <a-plane position="1 1 -5" id="testplane2"
+                material="side: double; color: #000000; transparent: false; opacity: 0.5" height="0.1" width="0.1"
+                depth="0.01">
+        </a-plane>
+        
     </a-scene>
 
     <style>
@@ -273,9 +378,9 @@
                         {
                             video: {
                                 mediaSource: "camera",
-                                // height: { max: 1280 },
-                                // width: { max: 720 },
-                                frameRate: { max: 60, ideal: 30 },
+                                // height: 2160,
+                                // width: 3840,
+                                // frameRate: { max: 60, ideal: 30 },
                                 facingMode: { ideal: "environment" }
                             }
                         });
@@ -580,11 +685,10 @@
             // console.log(form_data);
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            // request from the database, the shortlist of IDs
-            retrieve_data("markers");
-
-        });
+        // document.addEventListener('DOMContentLoaded', () => {
+        //     // request from the database, the shortlist of IDs
+        //     retrieve_data("markers");
+        // });
     </script>
 
     <script>
@@ -824,7 +928,7 @@
                                 width: 2
                             });
                             new_el.setAttribute('id', "recognition");
-                            new_el.setAttribute('position', { x: 1, y: 0, z: 0 });
+                            new_el.setAttribute('position', { x: 0, y: 0, z: 0 });
                             res_box.appendChild(new_el);
                             textElement.appendChild(res_box);
 
@@ -837,10 +941,10 @@
             XHR.send();
         }
 
-        const interval = window.setInterval(function () {
-            console.log("Requesting latest recognition results for self client " + NAF.connection.adapter.clientId);
-            retrieve_recognition(NAF.connection.adapter.clientId)
-        }, 100);
+        // const interval = window.setInterval(function () {
+        //     console.log("Requesting latest recognition results for self client " + NAF.connection.adapter.clientId);
+        //     retrieve_recognition(NAF.connection.adapter.clientId)
+        // }, 100);
 
     // clearInterval(interval);
 
@@ -864,6 +968,7 @@
         // Called by Networked-Aframe when connected to server
         function onConnect() {
             console.log("onConnect", new Date());
+            NAF.connection.subscribeToDataChannel('results', pushData);
             // setTimeout(sendEvents, 3000);
         }
 

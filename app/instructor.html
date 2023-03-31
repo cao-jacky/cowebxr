@@ -1504,6 +1504,8 @@
             XHR.send();
         }
 
+        console.log("ajsdhasj " + NAF.connection.adapter);
+
         const interval = window.setInterval(function () {
             console.log("Requesting latest recognition results for self client " + NAF.connection.adapter.clientId);
             retrieve_recognition(NAF.connection.adapter.clientId)
