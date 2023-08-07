@@ -38,9 +38,8 @@ if (process.env.NODE_ENV === "development") {
 
 // Start Express https server
 const webServer = https.createServer({
-  key:  fs.readFileSync("/etc/letsencrypt/live/cowebxr.com/privkey.pem"),
-  ca:   fs.readFileSync("/etc/letsencrypt/live/cowebxr.com/chain.pem"),
-  cert: fs.readFileSync("/etc/letsencrypt/live/cowebxr.com/fullchain.pem")
+  cert:  fs.readFileSync("/mnt/d/research/cowebxr.com+3.pem"),
+  key: fs.readFileSync("/mnt/d/research/cowebxr.com+3-key.pem")
 }, app);
 
 // Start Socket.io so it attaches itself to Express server
