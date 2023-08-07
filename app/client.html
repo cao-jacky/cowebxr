@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <style>
+        @font-face {
+            font-family: 'Karla';
+            font-style: normal;
+            font-weight: 400;
+            src: local('Karla'), local('Karla-Regular'),
+                url(https://fonts.gstatic.com/s/karla/v5/31P4mP32i98D9CEnGyeX9Q.woff2) format('woff2');
+            unicode-range: U+0100-024F, U+1E00-1EFF, U+20A0-20AB, U+20AD-20CF, U+2C60-2C7F, U+A720-A7FF;
+        }
+
+        @font-face {
+            font-family: 'Karla';
+            font-style: normal;
+            font-weight: 400;
+            src: local('Karla'), local('Karla-Regular'),
+                url(https://fonts.gstatic.com/s/karla/v5/Zi_e6rBgGqv33BWF8WTq8g.woff2) format('woff2');
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074,
+                U+20AC, U+2212, U+2215, U+E0FF, U+EFFD, U+F000;
+        }
+
+        button.webvr-ui-button {
+            font-family: 'Karla', sans-serif;
+
+            border: rgb(80, 168, 252) 2px solid;
+            border-radius: 2px;
+            box-sizing: border-box;
+            background: none;
+
+            height: 55px;
+            min-width: 175.99999999999997px;
+            display: inline-block;
+            position: relative;
+
+            cursor: pointer;
+        }
+
+        button.webvr-ui-button:focus {
+            outline: none;
+        }
+
+        /*
+        * Logo
+        */
+
+        .webvr-ui-logo {
+            width: 55px;
+            height: 55px;
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            width: 51px;
+            height: 51px;
+        }
+
+        .webvr-ui-svg {
+            fill: rgb(80, 168, 252);
+            margin-top: 18.166666666666668px;
+            margin-left: 18.333333333333332px;
+        }
+
+        .webvr-ui-svg-error {
+            fill: rgb(80, 168, 252);
+            display: none;
+            margin-top: 14.092592592592595px;
+            margin-left: 18.333333333333332px;
+        }
+
+
+        /*
+        * Title
+        */
+
+        .webvr-ui-title {
+            color: rgb(80, 168, 252);
+            position: relative;
+            font-size: 18.333333333333332px;
+            padding-left: 57.75px;
+            padding-right: 18.333333333333332px;
+        }
+
+        /*
+        * disabled
+        */
+
+        button.webvr-ui-button[disabled=true] {
+            opacity: 0.5;
+        }
+
+        button.webvr-ui-button[disabled=true]>.webvr-ui-logo>.webvr-ui-svg {
+            display: none;
+        }
+
+        button.webvr-ui-button[disabled=true]>.webvr-ui-logo>.webvr-ui-svg-error {
+            display: initial;
+        }
+
+        /*
+        * warning
+        */
+        div.webxrWarning {
+            color: #f00;
+            font-weight: bold;
+        }
+    </style>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <title>CoWebXR Client</title>
+
+    <link href="./AR Depth API_files/common.css" rel="stylesheet">
+
+    <script src="./js/webxr-polyfill.js"></script>
+    <script src="./js/webxr-button.js"></script>
+</head>
+
+<body>
+    <header>
+        <summary>CoWebXR - Client Application</summary>
+        <p>
+            This is the client application component of the CoWebXR system.
+        </p>
+
+    </header>
+
+    <div id="text-overlay">
+        <div id="text-info"></div>
+    </div>
+
+    <script id="vertexShader" type="x-shader/x-vertex">
+        precision mediump float;
+  
+        attribute vec2 aVertexPosition;
+        attribute vec2 aTexCoord;
+  
+        varying vec2 vTexCoord;
+  
+        void main(void) {
+          gl_Position = vec4(aVertexPosition, 0.0, 1.0);
+          vTexCoord = aTexCoord;
+        }
+    </script>
+
+    <script id="fragmentShader" type="x-shader/x-fragment" src="./AR Depth API_files/depth-api-gpu.frag"></script>
+    <script id="turboFragment" type="x-shader/x-fragment" src="./AR Depth API_files/turbo.glsl"></script>
+
+    <script type="module">
+        import { mat4, vec3, mat3, vec2 } from './js/render/math/gl-matrix.js';
+
+        // XR globals.
+        let xrButton = null;
+        let xrRefSpace = null;
+
+        // WebGL scene globals.
+        let gl = null;
+        let shaderProgram = null;
+        let programInfo = null;
+        let vertexBuffer = null;
+        let depthTexture = null;
+
+        // shader code
+        let vertexShaderSource = null;
+        let fragmentShaderSource = null;
+
+        let ws = new WebSocket('wss://192.168.1.108:8765')
+        ws.onopen = () => {
+            console.log('ws opened on browser')
+            ws.send('hello world')
+        }
+
+        const textOverlayElement = document.querySelector("#text-overlay");
+        if (!textOverlayElement) {
+            console.error("#text-overlay element not found!");
+            throw new Error("#text-overlay element not found!");
+        }
+
+        const textInfoElement = document.querySelector("#text-info");
+        if (!textInfoElement) {
+            console.error("#text-info element not found!");
+            throw new Error("#text-info element not found!");
+        }
+
+        function initXR() {
+            xrButton = new XRDeviceButton({
+                onRequestSession: onRequestSession,
+                onEndSession: onEndSession,
+                textEnterXRTitle: "START AR",
+                textXRNotFoundTitle: "AR NOT FOUND",
+                textExitXRTitle: "EXIT AR",
+                supportedSessionTypes: ['immersive-ar']
+            });
+            document.querySelector('header').appendChild(xrButton.domElement);
+        }
+
+        function onRequestSession() {
+            // Requests an immersive session with environment integration.
+
+            let options = {
+                requiredFeatures: ['depth-sensing', 'dom-overlay'],
+                optionalFeatures: [],
+                domOverlay: { root: textOverlayElement },
+                depthSensing: {
+                    usagePreference: ["cpu-optimized"],
+                    dataFormatPreference: ["luminance-alpha"],
+                }
+            };
+
+            navigator.xr.requestSession('immersive-ar', options).then((session) => {
+                session.mode = 'immersive-ar';
+                xrButton.setSession(session);
+
+                fetchShaders().then(() => {
+                    onSessionStarted(session);
+                });
+            });
+        }
+
+        function onSessionStarted(session) {
+
+            session.addEventListener('end', onSessionEnded);
+
+            let canvas = document.createElement('canvas');
+            gl = canvas.getContext('webgl', {
+                xrCompatible: true
+            });
+
+            initializeGL();
+
+            session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+            session.requestReferenceSpace('local').then((refSpace) => {
+                xrRefSpace = refSpace;
+                session.requestAnimationFrame(onXRFrame);
+            });
+
+            if (session.depthUsage != "cpu-optimized") {
+                throw new Error("Unsupported depth API usage!");
+            }
+
+            if (session.depthDataFormat != "luminance-alpha") {
+                throw new Error("Unsupported depth data format!");
+            }
+        }
+
+        function onEndSession(session) {
+            session.end();
+        }
+
+        function onSessionEnded(event) {
+            xrButton.setSession(null);
+        }
+
+        async function fetchShader(id) {
+            const element = document.getElementById(id);
+            const url = element.src;
+
+            const response = await fetch(url);
+            const text = await response.text();
+
+            return text;
+        }
+
+        async function fetchShaders() {
+            vertexShaderSource = document.getElementById('vertexShader').textContent;
+            fragmentShaderSource = await fetchShader("fragmentShader") + "\n"
+                + await fetchShader("turboFragment");
+
+        }
+
+
+        function uploadVertexData(vertices) {
+            const result = gl.createBuffer();
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, result);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+            return result;
+        }
+
+        function initializeGL() {
+            shaderProgram = initShaderProgram(vertexShaderSource, fragmentShaderSource);
+
+            programInfo = {
+                program: shaderProgram,
+                attribLocations: {
+                    vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
+                    texCoord: gl.getAttribLocation(shaderProgram, 'aTexCoord'),
+                },
+                uniformLocations: {
+                    depthTexture: gl.getUniformLocation(shaderProgram, 'uDepthTexture'),
+                    uvTransform: gl.getUniformLocation(shaderProgram, 'uUvTransform'),
+                    rawValueToMeters: gl.getUniformLocation(shaderProgram, 'uRawValueToMeters'),
+                    alpha: gl.getUniformLocation(shaderProgram, 'uAlpha'),
+                },
+            };
+
+            // clip space coordinates + texture space coordinates
+            // our depth buffer has an origin in top-left corner of the screen -
+            // we need to adjust the texture coordinates to account for that
+            const vertices_data = [
+                -1, -1, 0, 1,  // bottom left
+                1, -1, 1, 1,  // bottom right
+                -1, 1, 0, 0,  // top left
+                1, 1, 1, 0,  // top right
+            ];
+
+            vertexBuffer = uploadVertexData(vertices_data);
+
+            depthTexture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, depthTexture);
+
+            // depth texture will likely not be power-of-2-sized, set parameters
+            // that would still make it work, see
+            // https://www.khronos.org/webgl/wiki/WebGL_and_OpenGL_Differences#Non-Power_of_Two_Texture_Support
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+            gl.bindTexture(gl.TEXTURE_2D, null);
+        }
+
+        function initShaderProgram(vsSource, fsSource) {
+            const vertexShader = loadShader(gl.VERTEX_SHADER, vsSource);
+            const fragmentShader = loadShader(gl.FRAGMENT_SHADER, fsSource);
+
+            // Create the shader program
+            const shaderProgram = gl.createProgram();
+            gl.attachShader(shaderProgram, vertexShader);
+            gl.attachShader(shaderProgram, fragmentShader);
+            gl.linkProgram(shaderProgram);
+
+            // If creating the shader program failed, alert
+            if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+                alert("Unable to initialize the shader program: " +
+                    gl.getProgramInfoLog(shaderProgram)
+                );
+                return null;
+            }
+
+            return shaderProgram;
+        }
+
+        function loadShader(type, source) {
+            const shader = gl.createShader(type);
+
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                alert(
+                    "An error occurred compiling the shaders: " +
+                    gl.getShaderInfoLog(shader)
+                );
+                gl.deleteShader(shader);
+                return null;
+            }
+
+            return shader;
+        }
+
+        const options = {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0,
+        };
+
+        function success(pos) {
+            const crd = pos.coords;
+
+            console.log("Your current position is:");
+            console.log(`Latitude : ${crd.latitude}`);
+            console.log(`Longitude: ${crd.longitude}`);
+            console.log(`More or less ${crd.accuracy} meters.`);
+        }
+
+        function error(err) {
+            console.warn(`ERROR(${err.code}): ${err.message}`);
+        }
+
+        // A function to get the compass direction from an angle
+        function getCompassDirection(angle) {
+            // An array of directions
+            var directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"];
+            // The index of the direction in the array
+            var index = Math.round((angle + 22.5) / 45) % 8;
+            // Return the direction
+            return directions[index];
+        }
+
+        // A function to handle the deviceorientation event
+        function handleOrientation(event) {
+            // Get the angle of the device relative to the magnetic north
+            var angle = event.alpha;
+            // Get the compass direction from the angle
+            var direction = getCompassDirection(angle);
+            // Display the direction on the screen
+            console.log("compass direction", direction);
+        }
+
+
+        // Called every time a XRSession requests that a new frame be drawn.
+        function onXRFrame(t, frame) {
+            const session = frame.session;
+            session.requestAnimationFrame(onXRFrame);
+
+            const baseLayer = session.renderState.baseLayer;
+
+            const pose = frame.getViewerPose(xrRefSpace);
+
+            if (pose) {
+                gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
+
+                // Clear the framebuffer
+                gl.clearColor(0, 0, 0, 0);
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+                for (const view of pose.views) {
+                    const viewport = baseLayer.getViewport(view);
+                    gl.viewport(viewport.x, viewport.y,
+                        viewport.width, viewport.height);
+
+                    const depthData = frame.getDepthInformation(view);
+
+                    // Attempting to export the data
+                    // console.log(depthData);
+                    // const depthInMeters = depthData.getDepthInMeters(0.25, 0.75);
+                    // console.log("Depth at normalized view coordinates (0.25, 0.75) is:",
+                    //     depthInMeters);
+
+                    // const curr_loc = navigator.geolocation.getCurrentPosition(success, error, options);
+                    // // console.log("current pos", curr_loc);
+
+                    // window.addEventListener("deviceorientation", handleOrientation);
+
+
+                    const uint8Array = new Uint8Array(depthData.data);
+
+                    // Convert ArrayBuffer to JSON string
+                    const jsonArray = Array.from(uint8Array);
+                    const jsonString = JSON.stringify(jsonArray);
+
+                    // console.log("string has length", jsonString.length);
+
+                    //
+
+                    if (depthData) {
+                        textInfoElement.innerHTML = "";
+
+                        // renderDepthInformationGPU(depthData, view, viewport);
+                    } else {
+                        textInfoElement.innerHTML = "Depth data unavailable in the current frame!";
+                    }
+                }
+            } else {
+                textInfoElement.innerHTML = "Pose unavailable in the current frame!";
+            }
+        }
+
+        function renderDepthInformationGPU(depthData, view, viewport) {
+            const depth_width = depthData.width;
+            const depth_height = depthData.height;
+
+            gl.useProgram(programInfo.program);
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+
+            gl.vertexAttribPointer(
+                programInfo.attribLocations.vertexPosition,
+                2,      // 2 components
+                gl.FLOAT,
+                false,  // don't normalize
+                16,     // stride = 4 floats * 4 bytes
+                0       // start at offset 0 of the buffer
+            );
+            gl.enableVertexAttribArray(
+                programInfo.attribLocations.vertexPosition
+            );
+
+            gl.vertexAttribPointer(
+                programInfo.attribLocations.texCoord,
+                2,      // 2 components
+                gl.FLOAT,
+                false,  // don't normalize
+                16,     // stride = 4 floats * 4 bytes
+                8       // start at offset of 2 floats * 4 bytes of the buffer
+            );
+            gl.enableVertexAttribArray(
+                programInfo.attribLocations.texCoord
+            );
+
+            gl.bindTexture(gl.TEXTURE_2D, depthTexture);
+
+            // Supply the data buffer after converting it to Uint8Array - the
+            // gl.texImage2D expects Uint8Array when using gl.UNSIGNED_BYTE type.
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, depthData.width,
+                depthData.height, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE,
+                new Uint8Array(depthData.data));
+
+            gl.activeTexture(gl.TEXTURE0);
+            gl.uniform1i(programInfo.uniformLocations.depthTexture, 0);
+
+            gl.uniformMatrix4fv(programInfo.uniformLocations.uvTransform, false,
+                depthData.normDepthBufferFromNormView.matrix);
+
+            gl.uniform1f(programInfo.uniformLocations.rawValueToMeters,
+                depthData.rawValueToMeters);
+
+            gl.uniform1f(programInfo.uniformLocations.alpha,
+                0.75);
+
+            gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        }
+
+
+        // Start the XR application.
+        initXR();
+    </script>
+</body>

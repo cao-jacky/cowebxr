@@ -436,6 +436,26 @@
       console.warn(`ERROR(${err.code}): ${err.message}`);
     }
 
+    // A function to get the compass direction from an angle
+    function getCompassDirection(angle) {
+      // An array of directions
+      var directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"];
+      // The index of the direction in the array
+      var index = Math.round((angle + 22.5) / 45) % 8;
+      // Return the direction
+      return directions[index];
+    }
+
+    // A function to handle the deviceorientation event
+    function handleOrientation(event) {
+      // Get the angle of the device relative to the magnetic north
+      var angle = event.alpha;
+      // Get the compass direction from the angle
+      var direction = getCompassDirection(angle);
+      // Display the direction on the screen
+      console.log("compass direction", direction);
+    }
+
 
     // Called every time a XRSession requests that a new frame be drawn.
     function onXRFrame(t, frame) {
@@ -465,10 +485,11 @@
           const depthInMeters = depthData.getDepthInMeters(0.25, 0.75);
           console.log("Depth at normalized view coordinates (0.25, 0.75) is:",
             depthInMeters);
-          
-          const curr_loc = navigator.geolocation.getCurrentPosition(success, error, options);
-          console.log("current pos", curr_loc);
 
+          const curr_loc = navigator.geolocation.getCurrentPosition(success, error, options);
+          // console.log("current pos", curr_loc);
+
+          window.addEventListener("deviceorientation", handleOrientation);
 
 
           const uint8Array = new Uint8Array(depthData.data);
