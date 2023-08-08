@@ -223,19 +223,6 @@
         // variables to store data 
         let device_orientation = null;
 
-
-        // creating secure websocket 
-
-        // var ws = new WebSocket('wss://10.38.151.146:8765'); // ws.onopen=()=> {
-        // console.log('[STATUS] Secure WebSocket connection made with Reconstructor Service');
-        // ws.send("Initial Registration");
-        // };
-
-        // ws.onmessage = (message) => {
-        // console.log(`message received`, message.data);
-        // // ws.close();
-        // };
-
         const textOverlayElement = document.querySelector("#text-overlay");
         if (!textOverlayElement) {
             console.error("#text-overlay element not found!");
@@ -498,11 +485,11 @@
                     navigator.geolocation.getCurrentPosition(gps_success, gps_error, options);
                     window.addEventListener("deviceorientation", handle_orientation);
 
-                    const depth_uint8 = new Uint8Array(depthData.data);
+                    const depth_uint16 = new Uint16Array(depthData.data);
 
                     // Convert ArrayBuffer to JSON string
-                    const depth_json_array = Array.from(depth_uint8);
-                    const depth_json_string = JSON.stringify(depth_json_array);
+                    const depth_json_array = Array.from(depth_uint16);
+                    // const depth_json_string = JSON.stringify(depth_json_array);
 
                     // const gps_string = JSON.stringify(device_posn);
                     // console.log(device_posn);
@@ -512,7 +499,11 @@
                     // };
 
                     curr_frame_data = {
-                        depth_data: depth_json_string,
+                        depth_data: {
+                            width: depthData.width,
+                            height: depthData.height,
+                            data: depth_json_array
+                        },
                         gps_data: device_posn
                     }
 
@@ -585,25 +576,6 @@
 
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         }
-
-        function foo() {
-            // let ws = new WebSocket('wss://10.38.151.146:8765');
-            // ws.onopen = () => {
-            // console.log("RUNNING");
-            // };
-            // ws.close();
-            // ws.send("ahhaaasd");
-
-
-        }
-        // let ws = new WebSocket('wss://10.38.151.146:8765');
-
-        function send_ws_data() {
-            ws.send("aoisjdasd");
-        }
-
-        // setInterval(send_ws_data, 100);
-
 
         // Start the XR application.
         initXR();
@@ -772,12 +744,24 @@
         ]
     });
 
-    function sendEvents() {
+    // creating secure websocket 
+    let ws = new WebSocket('wss://10.38.151.146:8765'); 
+    ws.onopen = () => {
+        console.log('[STATUS] Secure WebSocket connection made with Reconstructor Service');
+        ws.send("Initial Registration");
+    };
+
+    ws.onmessage = (message) => {
+        console.log(`message received`, message.data);
+        // ws.close();
+    };
+
+    function send_data() {
         NAF.connection.broadcastDataGuaranteed('reliableBroadcast', '');
         NAF.connection.broadcastData('unreliableBroadcast', '');
 
         var clients = NAF.connection.getConnectedClients();
-        console.log(clients);
+        console.log("CLIENTS", clients);
 
         var firstClient;
         for (firstClient in clients) break;
@@ -785,18 +769,23 @@
         // console.error(clients);
         // console.error(firstClient);
 
-        NAF.connection.sendDataGuaranteed(firstClient, 'reliableSend', '');
-        NAF.connection.sendData(firstClient, 'unreliableSend', '');
+        NAF.connection.sendDataGuaranteed(8379079273475150, 'reliableSend', '');
+        NAF.connection.sendData(8379079273475150, 'unreliableSend', '');
 
         console.log("TEST POSN", curr_frame_data);
+        let ws = new WebSocket('wss://10.38.151.146:8765'); 
+        ws.onopen = () => {
+            console.log("sending data to server", new Date())
+            // const depth_json_string = JSON.stringify(depth_json_array);
+            ws.send(JSON.stringify(curr_frame_data));
+        };
     }
-
 
     // Called by Networked-Aframe when connected to server
     function onConnect() {
         console.log("onConnect", new Date());
         NAF.connection.subscribeToDataChannel('results', pushData);
-        setInterval(sendEvents, 3000);
+        setInterval(send_data, 250);
     }
 </script>
 </body>
