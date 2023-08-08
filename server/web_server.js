@@ -1,7 +1,7 @@
 // Load required modules
 //const http = require("http");                 // http server core module
-var https	= require("https"); // https functionality
-var fs		= require("fs"); // file system 
+var https = require("https"); // https functionality
+var fs = require("fs"); // file system 
 var cors = require('cors');
 const path = require("path");
 const express = require("express");           // web framework external module
@@ -19,9 +19,9 @@ const port = process.env.PORT || 443;
 // Setup and configure Express https server.
 const app = express();
 app.use(express.static(path.resolve(__dirname, "..", "app"),
-  {index:false,extensions:['html']}));
+  { index: false, extensions: ['html'] }));
 app.use("/dist", express.static(path.resolve(__dirname, "..", "dist")));
-app.use(cors()); 
+app.use(cors());
 
 // Serve the example and build the bundle in development.
 if (process.env.NODE_ENV === "development") {
@@ -38,15 +38,15 @@ if (process.env.NODE_ENV === "development") {
 
 // Start Express https server
 const webServer = https.createServer({
-  cert:  fs.readFileSync("/mnt/d/research/cowebxr.com+3.pem"),
-  key: fs.readFileSync("/mnt/d/research/cowebxr.com+3-key.pem")
+  cert: fs.readFileSync("/home/jackycao/cowebxr.com+3.pem"),
+  key: fs.readFileSync("/home/jackycao/cowebxr.com+3-key.pem")
 }, app);
 
 // Start Socket.io so it attaches itself to Express server
-const socketServer = socketIo.listen(webServer, {"log level": 1});
+const socketServer = socketIo.listen(webServer, { "log level": 1 });
 const myIceServers = [
-  {"urls":"stun:stun1.l.google.com:19302"},
-  {"urls":"stun:stun2.l.google.com:19302"},
+  { "urls": "stun:stun1.l.google.com:19302" },
+  { "urls": "stun:stun2.l.google.com:19302" },
   // {
   //   "urls":"turn:[ADDRESS]:[PORT]",
   //   "username":"[USERNAME]",
@@ -64,38 +64,38 @@ easyrtc.setOption("demosEnable", true);
 
 // Overriding the default easyrtcAuth listener, only so we can directly access its callback
 easyrtc.events.on("easyrtcAuth", (socket, easyrtcid, msg, socketCallback, callback) => {
-    easyrtc.events.defaultListeners.easyrtcAuth(socket, easyrtcid, msg, socketCallback, (err, connectionObj) => {
-        if (err || !msg.msgData || !msg.msgData.credential || !connectionObj) {
-            callback(err, connectionObj);
-            return;
-        }
+  easyrtc.events.defaultListeners.easyrtcAuth(socket, easyrtcid, msg, socketCallback, (err, connectionObj) => {
+    if (err || !msg.msgData || !msg.msgData.credential || !connectionObj) {
+      callback(err, connectionObj);
+      return;
+    }
 
-        connectionObj.setField("credential", msg.msgData.credential, {"isShared":false});
+    connectionObj.setField("credential", msg.msgData.credential, { "isShared": false });
 
-        console.log("["+easyrtcid+"] Credential saved!", connectionObj.getFieldValueSync("credential"));
+    console.log("[" + easyrtcid + "] Credential saved!", connectionObj.getFieldValueSync("credential"));
 
-        callback(err, connectionObj);
-    });
+    callback(err, connectionObj);
+  });
 });
 
 // To test, lets print the credential to the console for every room join!
 easyrtc.events.on("roomJoin", (connectionObj, roomName, roomParameter, callback) => {
-    console.log("["+connectionObj.getEasyrtcid()+"] Credential retrieved!", connectionObj.getFieldValueSync("credential"));
-    easyrtc.events.defaultListeners.roomJoin(connectionObj, roomName, roomParameter, callback);
+  console.log("[" + connectionObj.getEasyrtcid() + "] Credential retrieved!", connectionObj.getFieldValueSync("credential"));
+  easyrtc.events.defaultListeners.roomJoin(connectionObj, roomName, roomParameter, callback);
 });
 
 // Start EasyRTC server
 easyrtc.listen(app, socketServer, null, (err, rtcRef) => {
-    console.log("Initiated");
+  console.log("Initiated");
 
-    rtcRef.events.on("roomCreate", (appObj, creatorConnectionObj, roomName, roomOptions, callback) => {
-        console.log("roomCreate fired! Trying to create: " + roomName);
+  rtcRef.events.on("roomCreate", (appObj, creatorConnectionObj, roomName, roomOptions, callback) => {
+    console.log("roomCreate fired! Trying to create: " + roomName);
 
-        appObj.events.defaultListeners.roomCreate(appObj, creatorConnectionObj, roomName, roomOptions, callback);
-    });
+    appObj.events.defaultListeners.roomCreate(appObj, creatorConnectionObj, roomName, roomOptions, callback);
+  });
 });
 
 // Listen on port
 webServer.listen(port, () => {
-    console.log("listening on http://cowebxr.com:" + port);
+  console.log("listening on http://cowebxr.com:" + port);
 });

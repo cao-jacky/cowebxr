@@ -3,6 +3,12 @@
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+
+    <script src="https://unpkg.com/networked-aframe@^0.11.0/dist/networked-aframe.min.js"></script>
+    <script src="https://webrtc.github.io/adapter/adapter-latest.js" crossorigin="anonymous"></script>
+    <script src="/dist/naf-janus-adapter.js"></script>
+
     <style>
         @font-face {
             font-family: 'Karla';
@@ -133,6 +139,52 @@
         <div id="text-info"></div>
     </div>
 
+    <a-scene vr-mode-ui="enabled: false;" '
+        renderer="logarithmicDepthBuffer: true;" 
+        embedded
+        arjs="
+            trackingMethod: best; 
+            sourceType: webcam;
+            debugUIEnabled: false;" 
+        networked-scene="
+            room: 1;
+            debug: false;
+            adapter: janus;
+            connectOnLoad: true;
+            serverURL: wss://cowebxr.com:8989/janus;">
+
+            <a-assets>
+                <!-- Templates -->
+        
+                <!-- Avatar -->
+                <template id="avatar-template" type="text/html">
+                    <a-entity class="avatar" networked-audio-source>
+                        <a-plane color="#fff" width="4" height="3" position="0 .6 0" material="side: back"
+                            networked-video-source></a-plane>
+                        <a-sphere class="head" color="#5985ff" scale="0.45 0.5 0.4"></a-sphere>
+                        <a-entity class="face" position="0 0.05 0">
+                            <a-sphere class="eye" color="#efefef" position="0.16 0.1 -0.35" scale="0.12 0.12 0.12">
+                                <a-sphere class="pupil" color="#000" position="0 0 -1" scale="0.2 0.2 0.2"></a-sphere>
+                            </a-sphere>
+                            <a-sphere class="eye" color="#efefef" position="-0.16 0.1 -0.35" scale="0.12 0.12 0.12">
+                                <a-sphere class="pupil" color="#000" position="0 0 -1" scale="0.2 0.2 0.2"></a-sphere>
+                            </a-sphere>
+                        </a-entity>
+                    </a-entity>
+                </template>
+        
+                <!-- /Templates -->
+            </a-assets>
+
+        
+        <a-camera look-controls="enabled: false" wasd-controls="enabled: false" position="0.5 0.5 -3.5" fit id="mainCamera">
+            <a-entity id="player" networked="template:#avatar-template;attachTemplateToLocal:false;" position="0 0 -1"
+                rotation="0 0 0" onhover>
+            </a-entity>
+        </a-camera>
+    </a-scene>
+
+
     <script id="vertexShader" type="x-shader/x-vertex">
         precision mediump float;
   
@@ -153,26 +205,36 @@
     <script type="module">
         import { mat4, vec3, mat3, vec2 } from './js/render/math/gl-matrix.js';
 
-        // XR globals.
+        // XR globals. 
         let xrButton = null;
         let xrRefSpace = null;
 
-        // WebGL scene globals.
+        // WebGL scene globals. 
         let gl = null;
         let shaderProgram = null;
         let programInfo = null;
         let vertexBuffer = null;
         let depthTexture = null;
 
-        // shader code
+        // shader code 
         let vertexShaderSource = null;
         let fragmentShaderSource = null;
 
-        let ws = new WebSocket('wss://192.168.1.108:8765')
-        ws.onopen = () => {
-            console.log('ws opened on browser')
-            ws.send('hello world')
-        }
+        // variables to store data 
+        let device_orientation = null;
+
+
+        // creating secure websocket 
+
+        // var ws = new WebSocket('wss://10.38.151.146:8765'); // ws.onopen=()=> {
+        // console.log('[STATUS] Secure WebSocket connection made with Reconstructor Service');
+        // ws.send("Initial Registration");
+        // };
+
+        // ws.onmessage = (message) => {
+        // console.log(`message received`, message.data);
+        // // ws.close();
+        // };
 
         const textOverlayElement = document.querySelector("#text-overlay");
         if (!textOverlayElement) {
@@ -267,11 +329,8 @@
 
         async function fetchShaders() {
             vertexShaderSource = document.getElementById('vertexShader').textContent;
-            fragmentShaderSource = await fetchShader("fragmentShader") + "\n"
-                + await fetchShader("turboFragment");
-
+            fragmentShaderSource = await fetchShader("fragmentShader") + "\n" + await fetchShader("turboFragment");
         }
-
 
         function uploadVertexData(vertices) {
             const result = gl.createBuffer();
@@ -304,10 +363,10 @@
             // our depth buffer has an origin in top-left corner of the screen -
             // we need to adjust the texture coordinates to account for that
             const vertices_data = [
-                -1, -1, 0, 1,  // bottom left
-                1, -1, 1, 1,  // bottom right
-                -1, 1, 0, 0,  // top left
-                1, 1, 1, 0,  // top right
+                -1, -1, 0, 1, // bottom left
+                1, -1, 1, 1, // bottom right
+                -1, 1, 0, 0, // top left
+                1, 1, 1, 0, // top right
             ];
 
             vertexBuffer = uploadVertexData(vertices_data);
@@ -370,16 +429,18 @@
             maximumAge: 0,
         };
 
-        function success(pos) {
+        function gps_success(pos) {
             const crd = pos.coords;
-
-            console.log("Your current position is:");
-            console.log(`Latitude : ${crd.latitude}`);
-            console.log(`Longitude: ${crd.longitude}`);
-            console.log(`More or less ${crd.accuracy} meters.`);
+            // setting current device position
+            device_posn = {
+                altitude: crd.altitude,
+                latitude: crd.latitude,
+                longitude: crd.longitude,
+                accuracy: crd.accuracy
+            };
         }
 
-        function error(err) {
+        function gps_error(err) {
             console.warn(`ERROR(${err.code}): ${err.message}`);
         }
 
@@ -394,15 +455,16 @@
         }
 
         // A function to handle the deviceorientation event
-        function handleOrientation(event) {
+        function handle_orientation(event) {
             // Get the angle of the device relative to the magnetic north
             var angle = event.alpha;
-            // Get the compass direction from the angle
-            var direction = getCompassDirection(angle);
-            // Display the direction on the screen
-            console.log("compass direction", direction);
-        }
+            device_orientation = angle;
 
+            // Get the compass direction from the angle
+            // var direction = getCompassDirection(angle);
+            // Display the direction on the screen
+            // console.log("compass direction", direction);
+        }
 
         // Called every time a XRSession requests that a new frame be drawn.
         function onXRFrame(t, frame) {
@@ -431,21 +493,28 @@
                     // console.log(depthData);
                     // const depthInMeters = depthData.getDepthInMeters(0.25, 0.75);
                     // console.log("Depth at normalized view coordinates (0.25, 0.75) is:",
-                    //     depthInMeters);
+                    // depthInMeters);
 
-                    // const curr_loc = navigator.geolocation.getCurrentPosition(success, error, options);
-                    // // console.log("current pos", curr_loc);
+                    navigator.geolocation.getCurrentPosition(gps_success, gps_error, options);
+                    window.addEventListener("deviceorientation", handle_orientation);
 
-                    // window.addEventListener("deviceorientation", handleOrientation);
-
-
-                    const uint8Array = new Uint8Array(depthData.data);
+                    const depth_uint8 = new Uint8Array(depthData.data);
 
                     // Convert ArrayBuffer to JSON string
-                    const jsonArray = Array.from(uint8Array);
-                    const jsonString = JSON.stringify(jsonArray);
+                    const depth_json_array = Array.from(depth_uint8);
+                    const depth_json_string = JSON.stringify(depth_json_array);
 
-                    // console.log("string has length", jsonString.length);
+                    // const gps_string = JSON.stringify(device_posn);
+                    // console.log(device_posn);
+                    // let ws = new WebSocket('wss://10.38.151.146:8765');
+                    // ws.onopen = () => {
+                    // ws.send(jsonString);
+                    // };
+
+                    curr_frame_data = {
+                        depth_data: depth_json_string,
+                        gps_data: device_posn
+                    }
 
                     //
 
@@ -472,11 +541,11 @@
 
             gl.vertexAttribPointer(
                 programInfo.attribLocations.vertexPosition,
-                2,      // 2 components
+                2, // 2 components
                 gl.FLOAT,
-                false,  // don't normalize
-                16,     // stride = 4 floats * 4 bytes
-                0       // start at offset 0 of the buffer
+                false, // don't normalize
+                16, // stride = 4 floats * 4 bytes
+                0 // start at offset 0 of the buffer
             );
             gl.enableVertexAttribArray(
                 programInfo.attribLocations.vertexPosition
@@ -484,11 +553,11 @@
 
             gl.vertexAttribPointer(
                 programInfo.attribLocations.texCoord,
-                2,      // 2 components
+                2, // 2 components
                 gl.FLOAT,
-                false,  // don't normalize
-                16,     // stride = 4 floats * 4 bytes
-                8       // start at offset of 2 floats * 4 bytes of the buffer
+                false, // don't normalize
+                16, // stride = 4 floats * 4 bytes
+                8 // start at offset of 2 floats * 4 bytes of the buffer
             );
             gl.enableVertexAttribArray(
                 programInfo.attribLocations.texCoord
@@ -517,8 +586,217 @@
             gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         }
 
+        function foo() {
+            // let ws = new WebSocket('wss://10.38.151.146:8765');
+            // ws.onopen = () => {
+            // console.log("RUNNING");
+            // };
+            // ws.close();
+            // ws.send("ahhaaasd");
+
+
+        }
+        // let ws = new WebSocket('wss://10.38.151.146:8765');
+
+        function send_ws_data() {
+            ws.send("aoisjdasd");
+        }
+
+        // setInterval(send_ws_data, 100);
+
 
         // Start the XR application.
         initXR();
     </script>
+
+    
+<script>
+    function genClientId() {
+        let num = '';
+        for (let i = 0; i < 16; i++) {
+            num += Math.floor(Math.random() * 10).toString();
+        }
+        return num;
+    }
+
+    // On mobile remove elements that are resource heavy
+    var isMobile = AFRAME.utils.device.isMobile();
+    document.addEventListener('DOMContentLoaded', () => {
+        const scene = document.querySelector('a-scene');
+        scene.addEventListener('adapter-ready', ({ detail: adapter }) => {
+            const clientId = genClientId();
+            console.log("CLIENT ID", clientId);
+            adapter.setClientId(clientId);
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                adapter.setLocalMediaStream(stream).then(() => {
+                    adapter.enableMicrophone(true);
+                    const currentStream = stream;
+                    navigator.mediaDevices.getUserMedia(
+                        {
+                            video: {
+                                mediaSource: "camera",
+                                // width: { max: 1280, ideal: 4096 },
+                                // height: { ideal: 2160 },
+                                // frameRate: { ideal: 60 },
+                                facingMode: { ideal: "environment" }
+                            }
+                        }).then((stream) => {
+                            currentStream.addTrack(stream.getVideoTracks()[0]);
+                            adapter.setLocalMediaStream(currentStream);
+                        });
+                });
+            }).catch(err => {
+                console.warn("Microphone access not allowed. This client will not broadcast audio.");
+            });
+        });
+    });
+
+</script>
+
+<script>
+    let device_posn = null;
+    let curr_frame_data = null;
+
+    var sceneEl = document.querySelector('a-scene');
+    var entityEl = document.createElement('a-entity');
+    entityEl.setAttribute('geometry', {
+        primitive: 'plane',
+        height: 0.5,
+        width: 0.25,
+    });
+    sceneEl.appendChild(entityEl);
+
+    var textEl = document.createElement('a-entity');
+    textEl.setAttribute('text', {
+        value: '',
+        height: 1,
+        width: 1
+    });
+    textEl.setAttribute('id', "recognition");
+    textEl.setAttribute('position', { x: 0, y: 0, z: -3 });
+    sceneEl.appendChild(textEl);
+
+    function pushData(senderId, dataType, data, targetObj) {
+        // console.log(data);
+        // console.log(data[0].results.names);
+
+        // const returned_data = JSON.parse(this.responseText);
+        // const recognition_results = JSON.parse(returned_data[0].results);
+
+        const yolo_width = 480;
+        const yolo_height = 640;
+
+        const win_width = window.innerWidth;
+        const win_height = window.innerHeight;
+
+        const recognition_results = data[0].results
+        const num_rr = recognition_results.bb.length;
+
+        // // console.log("window size " + window.innerWidth + "x" + window.innerHeight);
+
+        if (num_rr > 0) {
+            var textElement = document.getElementById("recognition");
+            textElement.innerHTML = '';
+            for (var i = 0; i < num_rr; i++) {
+                const curr_label = recognition_results.names[i];
+                const curr_res = recognition_results.bb[i];
+
+                const x_min = curr_res[0];
+                const y_min = curr_res[1];
+                const box_width = curr_res[2];
+                const box_height = curr_res[3];
+
+                // console.log(curr_res, curr_label);
+
+                // const x_ratio = win_width / yolo_width;
+                // const y_ratio = win_height / yolo_height;
+
+                // const x_centre = (x_min + box_width) / 2;
+                // const y_centre = (y_min + box_height) / 2;
+
+                // const x_cen_new = (x_centre*x_ratio) - x_ratio;
+                // const y_cen_new = (y_centre*y_ratio) - y_ratio;
+
+                const x_centre = x_min + (box_width / 2);
+                const y_centre = y_min - (box_height / 2);
+
+                const y_min_new = box_height - y_min - 1;
+
+                // console.log(x_centre, y_centre);
+
+                var res_box = document.createElement('a-entity');
+                // res_box.setAttribute('geometry', {
+                //     primitive: 'plane',
+                //     height: box_height,
+                //     width: box_width
+                // });
+                // // res_box.setAttribute('rotation', {x: 0, y: 0, z: -90});
+                // res_box.setAttribute('material', {
+                //     opacity: 0,
+                //     transparent: true
+                // });
+                res_box.setAttribute('position', { x: x_min, y: y_min, z: -2.5 });
+                // res_box.setAttribute('rotation', {x: 180, y: 0, z: 0});
+
+                var new_el = document.createElement('a-entity');
+                new_el.setAttribute('text', {
+                    value: curr_label,
+                    height: 1,
+                    width: 1
+                });
+                new_el.setAttribute('id', "recognition");
+                new_el.setAttribute('position', { x: x_min, y: y_min, z: -1 });
+                // new_el.setAttribute('rotation', {x: 50, y: 30, z: 0});
+                new_el.setAttribute('material', {
+                    side: "double"
+                })
+                res_box.appendChild(new_el);
+                textElement.appendChild(res_box);
+
+            }
+        }
+
+    }
+
+    // Define custom schema for syncing avatar color, set by random-color
+    NAF.schemas.add({
+        template: '#avatar-template',
+        components: [
+            'position',
+            'rotation',
+            {
+                selector: '.head',
+                component: 'material',
+                property: 'color'
+            }
+        ]
+    });
+
+    function sendEvents() {
+        NAF.connection.broadcastDataGuaranteed('reliableBroadcast', '');
+        NAF.connection.broadcastData('unreliableBroadcast', '');
+
+        var clients = NAF.connection.getConnectedClients();
+        console.log(clients);
+
+        var firstClient;
+        for (firstClient in clients) break;
+
+        // console.error(clients);
+        // console.error(firstClient);
+
+        NAF.connection.sendDataGuaranteed(firstClient, 'reliableSend', '');
+        NAF.connection.sendData(firstClient, 'unreliableSend', '');
+
+        console.log("TEST POSN", curr_frame_data);
+    }
+
+
+    // Called by Networked-Aframe when connected to server
+    function onConnect() {
+        console.log("onConnect", new Date());
+        NAF.connection.subscribeToDataChannel('results', pushData);
+        setInterval(sendEvents, 3000);
+    }
+</script>
 </body>

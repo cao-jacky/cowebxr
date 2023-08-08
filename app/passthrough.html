@@ -43,13 +43,17 @@
         arjs="
             trackingMethod: best; 
             sourceType: webcam;
-            debugUIEnabled: false;" 
+            debugUIEnabled: false;
+            " 
         networked-scene="
             room: 1;
             debug: false;
             adapter: janus;
             connectOnLoad: true;
-            serverURL: wss://cowebxr.com:8989/janus;">
+            serverURL: wss://cowebxr.com:8989/janus;"
+        webxr="
+            requiredFeatures: depth-sensing;
+        ">
 
             <a-assets>
 
@@ -86,6 +90,8 @@
                 rotation="0 0 0" onhover>
             </a-entity>
         </a-entity> -->
+
+        <a-entity ar-test></a-entity>
 
         <a-camera look-controls="enabled: false" wasd-controls="enabled: false" position="0.5 0.5 -3.5" fit id="mainCamera">
             <a-entity id="player" networked="template:#avatar-template;attachTemplateToLocal:false;" position="0 0 -1"
@@ -160,6 +166,7 @@
         textEl.setAttribute('id', "recognition");
         textEl.setAttribute('position', { x: 0, y: 0, z: -3 });
         sceneEl.appendChild(textEl);
+
 
         function pushData(senderId, dataType, data, targetObj) {
             // console.log(data);
@@ -242,6 +249,24 @@
             }
     
         }
+
+        AFRAME.registerComponent('ar-test', {
+			init: function () {
+                console.log("HAHAHAHA");
+			},
+			tick: function () {
+                let frame = this.el.sceneEl.frame;
+                console.log("frame1", frame);
+				if (this.el.sceneEl.is('ar-mode')) {
+                    let frame = this.sceneEl.frame;
+                    console.log("FRAME", frame);
+                    let xrViewerPose = frame.getViewerPose(this.refSpace);
+
+                    const depthData = frame.getDepthInformation(view);
+                    console.log("DEPTH DATA", depthData);
+				}
+			}
+		});
 
         // Define custom schema for syncing avatar color, set by random-color
         NAF.schemas.add({
