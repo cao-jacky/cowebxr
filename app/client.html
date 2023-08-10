@@ -204,6 +204,7 @@
 
     <script type="module">
         import { mat4, vec3, mat3, vec2 } from './js/render/math/gl-matrix.js';
+        // import * as mat4 from "../js/third-party/gl-matrix/mat4.js"
 
         // XR globals. 
         let xrButton = null;
@@ -211,10 +212,21 @@
 
         // WebGL scene globals. 
         let gl = null;
+        let glBinding = null;
+
         let shaderProgram = null;
         let programInfo = null;
         let vertexBuffer = null;
         let depthTexture = null;
+
+        let buffers = null;
+        let texture = null;
+        let readback_framebuffer = null;
+        let readback_pixels = null;
+
+        let rgb_data = null;
+
+        const perform_readback = true;
 
         // shader code 
         let vertexShaderSource = null;
@@ -251,7 +263,7 @@
             // Requests an immersive session with environment integration.
 
             let options = {
-                requiredFeatures: ['depth-sensing', 'dom-overlay'],
+                requiredFeatures: ['depth-sensing', 'dom-overlay', 'camera-access'],
                 optionalFeatures: [],
                 domOverlay: { root: textOverlayElement },
                 depthSensing: {
@@ -278,6 +290,8 @@
             gl = canvas.getContext('webgl', {
                 xrCompatible: true
             });
+
+            glBinding = new XRWebGLBinding(session, gl);
 
             initializeGL();
 
@@ -453,14 +467,42 @@
             // console.log("compass direction", direction);
         }
 
+        const intrinsicsPrinted = {};
+
+        function getCameraIntrinsics(projectionMatrix, viewport) {
+            const p = projectionMatrix;
+            // Principal point in pixels (typically at or near the center of the viewport)
+            let u0 = (1 - p[8]) * viewport.width / 2 + viewport.x;
+            let v0 = (1 - p[9]) * viewport.height / 2 + viewport.y;
+            // Focal lengths in pixels (these are equal for square pixels)
+            let ax = viewport.width / 2 * p[0];
+            let ay = viewport.height / 2 * p[5];
+            // Skew factor in pixels (nonzero for rhomboid pixels)
+            let gamma = viewport.width / 2 * p[4];
+
+            // Print the calculated intrinsics, but once per unique value to
+            // avoid log spam. These can change every frame for some XR devices.
+            const intrinsicString = (
+                "intrinsics: u0=" +u0 + " v0=" + v0 + " ax=" + ax + " ay=" + ay +
+                    " gamma=" + gamma + " for viewport {width=" +
+                    viewport.width + ",height=" + viewport.height + ",x=" +
+                    viewport.x + ",y=" + viewport.y + "}");
+            if (!intrinsicsPrinted[intrinsicString]) {
+                console.log("projection:", Array.from(projectionMatrix).join(", "));
+                console.log(intrinsicString);
+                intrinsicsPrinted[intrinsicString] = true;
+            }
+        }
+
         // Called every time a XRSession requests that a new frame be drawn.
         function onXRFrame(t, frame) {
             const session = frame.session;
             session.requestAnimationFrame(onXRFrame);
 
             const baseLayer = session.renderState.baseLayer;
-
             const pose = frame.getViewerPose(xrRefSpace);
+
+            let rgb_data = null;
 
             if (pose) {
                 gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
@@ -469,10 +511,75 @@
                 gl.clearColor(0, 0, 0, 0);
                 gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
+                gl.enable(gl.DEPTH_TEST);
+
                 for (const view of pose.views) {
                     const viewport = baseLayer.getViewport(view);
                     gl.viewport(viewport.x, viewport.y,
                         viewport.width, viewport.height);
+
+                    // For an application working in viewport space, get the camera intrinsics
+                    // based on the viewport dimensions:
+                    getCameraIntrinsics(view.projectionMatrix, viewport);
+
+                    if (view.camera) {
+                        const cameraViewport = {
+                          width: view.camera.width,
+                          height: view.camera.height,
+                          x: 0,
+                          y: 0};
+                      getCameraIntrinsics(view.projectionMatrix, cameraViewport);
+
+                        // Update camera image texture.
+                        const texture = glBinding.getCameraImage(view.camera);
+                        const texture_bytes = view.camera.width * view.camera.height * 4;
+                        if (!readback_pixels || readback_pixels.length != texture_bytes) {
+                        readback_pixels = new Uint8Array(texture_bytes);
+                        }
+
+                        readback_pixels.fill(0);
+                        readback_framebuffer = gl.createFramebuffer();
+
+                        gl.bindTexture(gl.TEXTURE_2D, texture);
+                        gl.bindFramebuffer(gl.FRAMEBUFFER, readback_framebuffer);
+                        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+                        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE) {
+                            gl.readPixels(0, 0, view.camera.width, view.camera.height, gl.RGBA, gl.UNSIGNED_BYTE, readback_pixels);
+
+                            // Create a canvas to hold the pixel data
+                            const canvas = document.createElement('canvas');
+                            canvas.width = view.camera.width;
+                            canvas.height = view.camera.height;
+                            const context = canvas.getContext('2d');
+
+                            const imageData = context.createImageData(view.camera.width, view.camera.height);
+                            imageData.data.set(readback_pixels);
+
+                            // Put the ImageData onto the canvas
+                            context.putImageData(imageData, 0, 0);
+
+                            const jpegQuality = 0.7; // Adjust JPEG quality as needed
+                            const jpegDataURL = canvas.toDataURL("image/jpeg", jpegQuality);
+
+                            const base64Data = jpegDataURL.split(",")[1];
+                            const binaryData = atob(base64Data);
+                            const jpegUint8Array = new Uint8Array(binaryData.length);
+                            for (let i = 0; i < binaryData.length; i++) {
+                                jpegUint8Array[i] = binaryData.charCodeAt(i);
+                            }
+
+                            rgb_data = jpegUint8Array;
+
+                            // console.log(jpegUint8Array);
+
+                            // console.log("PIXELS", view.camera.width, view.camera.height, readback_pixels.length)
+                        } else {
+                        console.warn("Framebuffer incomplete!");
+                        }
+
+                        // gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
+                    }
 
                     const depthData = frame.getDepthInformation(view);
 
@@ -486,19 +593,17 @@
                     window.addEventListener("deviceorientation", handle_orientation);
 
                     const depth_uint16 = new Uint16Array(depthData.data);
-
-                    // Convert ArrayBuffer to JSON string
                     const depth_json_array = Array.from(depth_uint16);
-                    // const depth_json_string = JSON.stringify(depth_json_array);
 
-                    // const gps_string = JSON.stringify(device_posn);
-                    // console.log(device_posn);
-                    // let ws = new WebSocket('wss://10.38.151.146:8765');
-                    // ws.onopen = () => {
-                    // ws.send(jsonString);
-                    // };
+                    const rgb_json_array = Array.from(rgb_data);
+
 
                     curr_frame_data = {
+                        rgb_data: {
+                            width: view.camera.width, 
+                            height: view.camera.height,
+                            data: rgb_json_array 
+                        },
                         depth_data: {
                             width: depthData.width,
                             height: depthData.height,
@@ -761,7 +866,7 @@
         NAF.connection.broadcastData('unreliableBroadcast', '');
 
         var clients = NAF.connection.getConnectedClients();
-        console.log("CLIENTS", clients);
+        // console.log("CLIENTS", clients);
 
         var firstClient;
         for (firstClient in clients) break;
@@ -772,10 +877,11 @@
         NAF.connection.sendDataGuaranteed(8379079273475150, 'reliableSend', '');
         NAF.connection.sendData(8379079273475150, 'unreliableSend', '');
 
-        console.log("TEST POSN", curr_frame_data);
+        console.log("sending data", curr_frame_data);
         let ws = new WebSocket('wss://10.38.151.146:8765'); 
+        // ws.binaryType = "arraybuffer"
         ws.onopen = () => {
-            console.log("sending data to server", new Date())
+            // console.log("sending data to server", new Date())
             // const depth_json_string = JSON.stringify(depth_json_array);
             ws.send(JSON.stringify(curr_frame_data));
         };

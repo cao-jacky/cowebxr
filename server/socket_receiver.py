@@ -12,33 +12,52 @@ import numpy as np
 
 from matplotlib import pyplot as plt
 
+from PIL import Image
+import io
+
 # set array for depth data
 depth_2d_array = None
-
-def depth_analyser(client_data):
-    depth_data = client_data['depth_data']
-        
-    data = depth_data['data']
     
-    depth_height = depth_data['height']
-    depth_width = depth_data['width']
+def rgb_depth_analyser(client_data):
+    depth_head = client_data['depth_data']
+    rgb_head = client_data['rgb_data']
+    
+    depth_data = depth_head['data']
+    rgb_data = rgb_head['data']
+    
+    depth_height = depth_head['height']
+    depth_width = depth_head['width']
     
     # print(np.shape(data), depth_height, depth_width)
     
-    if np.sum(data) != 0: 
-        depth_2d_array = np.reshape(data, (depth_height, depth_width))
+    fig, axs = plt.subplots(1, 2, figsize=(10, 7))
+
+    if np.sum(depth_data) != 0: 
+        depth_2d_array = np.reshape(depth_data, (depth_height, depth_width))
         depth_2d_array = np.fliplr(np.transpose(depth_2d_array))
         # print(depth_2d_array)
         
-        plt.imshow(depth_2d_array, interpolation='nearest')
+        axs[0].imshow(depth_2d_array, interpolation='nearest')
         # plt.camroll(-90)
-        plt.savefig('foo.png')
+
+        image_bytes = bytes(rgb_data)
+        image_stream = io.BytesIO(image_bytes)
+        image = Image.open(image_stream)
+        image = image.transpose(Image.FLIP_TOP_BOTTOM)
+                
+        axs[1].imshow(image)
+
+    plt.savefig('foo.png')
+    plt.close()
+        
+
 
 async def receive(websocket):
     received_data = await websocket.recv()
     try:
         data_json = json.loads(received_data)
-        depth_analyser(data_json)
+        rgb_depth_analyser(data_json)
+        
         # print(data_json['depth_data'])
     except:
         pass
