@@ -61,3 +61,5 @@ examples/dist
 5gwebxr/assets/FabLabAll.glb
 
 middleware/stream_capture/videos/
+server/client_data/depth/*.png
+server/client_data/image/*.jpg

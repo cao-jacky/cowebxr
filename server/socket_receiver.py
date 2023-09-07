@@ -14,9 +14,15 @@ from matplotlib import pyplot as plt
 
 from PIL import Image
 import io
+import glob
 
 # set array for depth data
 depth_2d_array = None
+
+paths = {
+    'rgb': 'client_data/image',
+    'depth': 'client_data/depth'
+}
     
 def rgb_depth_analyser(client_data):
     depth_head = client_data['depth_data']
@@ -25,32 +31,50 @@ def rgb_depth_analyser(client_data):
     depth_data = depth_head['data']
     rgb_data = rgb_head['data']
     
+    depth_scaling = depth_head['scale']
+        
     depth_height = depth_head['height']
     depth_width = depth_head['width']
     
     # print(np.shape(data), depth_height, depth_width)
-    
-    fig, axs = plt.subplots(1, 2, figsize=(10, 7))
+        
+    # fig, axs = plt.subplots(1, 2, figsize=(10, 7))
 
     if np.sum(depth_data) != 0: 
         depth_2d_array = np.reshape(depth_data, (depth_height, depth_width))
-        depth_2d_array = np.fliplr(np.transpose(depth_2d_array))
-        # print(depth_2d_array)
+        depth_2d_array = np.fliplr(np.transpose(depth_2d_array)) 
+        depth_2d_array = depth_2d_array * depth_head['scale']
+        print(np.min(depth_2d_array), np.max(depth_2d_array))
         
-        axs[0].imshow(depth_2d_array, interpolation='nearest')
-        # plt.camroll(-90)
+        fig, axs = plt.subplots(1, 1, figsize=(10, 7))
+        axs.imshow(depth_2d_array, interpolation='nearest')
+        axs.axis('off')
+        
+        depth_folder = paths['depth']
+        curr_depth_files = len(glob.glob(f'{depth_folder}/*.png'))
+        plt.savefig(f'{depth_folder}/{curr_depth_files+1}.png')
+        plt.close()
 
         image_bytes = bytes(rgb_data)
         image_stream = io.BytesIO(image_bytes)
         image = Image.open(image_stream)
         image = image.transpose(Image.FLIP_TOP_BOTTOM)
-                
-        axs[1].imshow(image)
-
-    plt.savefig('foo.png')
-    plt.close()
+        image = image.resize((depth_height, depth_width))
         
-
+        fig, axs = plt.subplots(1, 1, figsize=(10, 7))
+        axs.imshow(image)
+        axs.axis('off')
+        
+        image_folder = paths['rgb']
+        curr_image_files = len(glob.glob(f'{image_folder}/*.jpg'))
+        plt.savefig(f'{image_folder}/{curr_image_files+1}.jpg')
+        plt.close()
+                
+        # axs[1].imshow(image)
+                
+    # plt.savefig('foo.png')
+    # plt.close()
+        
 
 async def receive(websocket):
     received_data = await websocket.recv()
@@ -81,4 +105,8 @@ async def main():
         await asyncio.Future()  # run forever
 
 if __name__ == "__main__":
+    for key, path in paths.items():
+        path = pathlib.Path(path)
+        path.mkdir(parents=True, exist_ok=True)
+
     asyncio.run(main())

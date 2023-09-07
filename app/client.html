@@ -145,13 +145,14 @@
         arjs="
             trackingMethod: best; 
             sourceType: webcam;
-            debugUIEnabled: false;" 
-        networked-scene="
+            debugUIEnabled: false;" >
+        <!-- networked-scene="
             room: 1;
             debug: false;
             adapter: janus;
             connectOnLoad: true;
-            serverURL: wss://cowebxr.com:8989/janus;">
+            serverURL: wss://cowebxr.com:8989/janus;"
+            > -->
 
             <a-assets>
                 <!-- Templates -->
@@ -223,8 +224,6 @@
         let texture = null;
         let readback_framebuffer = null;
         let readback_pixels = null;
-
-        let rgb_data = null;
 
         const perform_readback = true;
 
@@ -494,6 +493,72 @@
             }
         }
 
+        function process_jpeg_rgb(data_rgb, data_depth, depth_uint16, camera_width, camera_height, depth_meters_conversion) {
+            const depth_json_array = Array.from(depth_uint16);
+
+            const rgb_json_array = Array.from(data_rgb);
+
+            curr_frame_data = {
+                rgb_data: {
+                    width: camera_width, 
+                    height: camera_height,
+                    data: rgb_json_array 
+                },
+                depth_data: {
+                    width: data_depth.width,
+                    height: data_depth.height,
+                    scale: depth_meters_conversion,
+                    data: depth_json_array
+                },
+                gps_data: device_posn
+            }
+        }
+
+        // Convert canvas content to a Blob with a timeout and optional resolution reduction
+        function conversion_blob(canvas, timeoutMillis, type, quality, newWidth, newHeight) {
+            return new Promise((resolve, reject) => {
+                if (typeof OffscreenCanvas !== 'undefined') {
+                    // Use OffscreenCanvas if available
+                    const offscreenCanvas = new OffscreenCanvas(newWidth, newHeight);
+                    const context = offscreenCanvas.getContext('2d');
+                    context.drawImage(canvas, 0, 0, newWidth, newHeight);
+
+                    offscreenCanvas.convertToBlob({ type, quality })
+                        .then(blob => {
+                            if (blob) {
+                                resolve(blob);
+                            } else {
+                                reject(new Error('Failed to convert canvas to Blob.'));
+                            }
+                        })
+                        .catch(error => reject(error));
+                } else {
+                    // Fall back to regular canvas if OffscreenCanvas is not available
+                    const tempCanvas = document.createElement('canvas');
+                    const tempContext = tempCanvas.getContext('2d');
+                    tempCanvas.width = newWidth;
+                    tempCanvas.height = newHeight;
+                    tempContext.drawImage(canvas, 0, 0, newWidth, newHeight);
+
+                    tempCanvas.toBlob(
+                        blob => {
+                            if (blob) {
+                                resolve(blob);
+                            } else {
+                                reject(new Error('Failed to convert canvas to Blob.'));
+                            }
+                        },
+                        type,
+                        quality
+                    );
+                }
+
+                setTimeout(() => reject(new Error('Timeout exceeded')), timeoutMillis);
+            });
+        }
+
+
+
         // Called every time a XRSession requests that a new frame be drawn.
         function onXRFrame(t, frame) {
             const session = frame.session;
@@ -502,7 +567,16 @@
             const baseLayer = session.renderState.baseLayer;
             const pose = frame.getViewerPose(xrRefSpace);
 
-            let rgb_data = null;
+            console.log("pose", pose);
+
+            // Get the position of the viewer.
+            const position = pose.transform.position;
+
+            // Get the orientation of the viewer.
+            const orientation = pose.transform.orientation;
+
+            console.log("position", position);
+            console.log("orientation", orientation);
 
             if (pose) {
                 gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
@@ -528,7 +602,8 @@
                           height: view.camera.height,
                           x: 0,
                           y: 0};
-                      getCameraIntrinsics(view.projectionMatrix, cameraViewport);
+                        
+                        getCameraIntrinsics(view.projectionMatrix, cameraViewport);
 
                         // Update camera image texture.
                         const texture = glBinding.getCameraImage(view.camera);
@@ -555,72 +630,41 @@
 
                             const imageData = context.createImageData(view.camera.width, view.camera.height);
                             imageData.data.set(readback_pixels);
-
-                            // Put the ImageData onto the canvas
                             context.putImageData(imageData, 0, 0);
 
-                            const jpegQuality = 0.7; // Adjust JPEG quality as needed
-                            const jpegDataURL = canvas.toDataURL("image/jpeg", jpegQuality);
+                            const jpeg_quality = 0.7; // Adjust JPEG quality as needed
 
-                            const base64Data = jpegDataURL.split(",")[1];
-                            const binaryData = atob(base64Data);
-                            const jpegUint8Array = new Uint8Array(binaryData.length);
-                            for (let i = 0; i < binaryData.length; i++) {
-                                jpegUint8Array[i] = binaryData.charCodeAt(i);
-                            }
+                            const depth_data = frame.getDepthInformation(view);
+                            const depth_uint16 = new Uint16Array(depth_data.data);
+                            const depth_meters_conversion = depth_data.rawValueToMeters;
 
-                            rgb_data = jpegUint8Array;
+                            console.log("meters", depth_meters_conversion);
 
-                            // console.log(jpegUint8Array);
+                            const timeoutMillis = 5000;
 
-                            // console.log("PIXELS", view.camera.width, view.camera.height, readback_pixels.length)
+                            let target_width = 720;
+                            let target_height = 1280;
+
+                            conversion_blob(canvas, timeoutMillis, "image/jpeg", jpeg_quality, target_width, target_height)
+                                .then(blob => blob.arrayBuffer())
+                                .then(buffer => {
+                                    const jpegUint8Array = new Uint8Array(buffer);
+
+                                    process_jpeg_rgb(jpegUint8Array, depth_data, depth_uint16, view.camera.width, view.camera.height, depth_meters_conversion);                           
+                                })
+                                .catch(error => {
+                                    console.error(error);
+                                    // Handle the timeout or other errors here
+                                });
                         } else {
                         console.warn("Framebuffer incomplete!");
                         }
 
                         // gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
                     }
+                    // navigator.geolocation.getCurrentPosition(gps_success, gps_error, options);
+                    // window.addEventListener("deviceorientation", handle_orientation);
 
-                    const depthData = frame.getDepthInformation(view);
-
-                    // Attempting to export the data
-                    // console.log(depthData);
-                    // const depthInMeters = depthData.getDepthInMeters(0.25, 0.75);
-                    // console.log("Depth at normalized view coordinates (0.25, 0.75) is:",
-                    // depthInMeters);
-
-                    navigator.geolocation.getCurrentPosition(gps_success, gps_error, options);
-                    window.addEventListener("deviceorientation", handle_orientation);
-
-                    const depth_uint16 = new Uint16Array(depthData.data);
-                    const depth_json_array = Array.from(depth_uint16);
-
-                    const rgb_json_array = Array.from(rgb_data);
-
-
-                    curr_frame_data = {
-                        rgb_data: {
-                            width: view.camera.width, 
-                            height: view.camera.height,
-                            data: rgb_json_array 
-                        },
-                        depth_data: {
-                            width: depthData.width,
-                            height: depthData.height,
-                            data: depth_json_array
-                        },
-                        gps_data: device_posn
-                    }
-
-                    //
-
-                    if (depthData) {
-                        textInfoElement.innerHTML = "";
-
-                        // renderDepthInformationGPU(depthData, view, viewport);
-                    } else {
-                        textInfoElement.innerHTML = "Depth data unavailable in the current frame!";
-                    }
                 }
             } else {
                 textInfoElement.innerHTML = "Pose unavailable in the current frame!";
@@ -733,6 +777,7 @@
 <script>
     let device_posn = null;
     let curr_frame_data = null;
+    let prev_frame_data = null;
 
     var sceneEl = document.querySelector('a-scene');
     var entityEl = document.createElement('a-entity');
@@ -860,38 +905,45 @@
         console.log(`message received`, message.data);
         // ws.close();
     };
+    
 
     function send_data() {
-        NAF.connection.broadcastDataGuaranteed('reliableBroadcast', '');
-        NAF.connection.broadcastData('unreliableBroadcast', '');
+        // NAF.connection.broadcastDataGuaranteed('reliableBroadcast', '');
+        // NAF.connection.broadcastData('unreliableBroadcast', '');
 
-        var clients = NAF.connection.getConnectedClients();
-        // console.log("CLIENTS", clients);
+        // var clients = NAF.connection.getConnectedClients();
+        // // console.log("CLIENTS", clients);
 
-        var firstClient;
-        for (firstClient in clients) break;
+        // var firstClient;
+        // for (firstClient in clients) break;
 
         // console.error(clients);
         // console.error(firstClient);
 
-        NAF.connection.sendDataGuaranteed(8379079273475150, 'reliableSend', '');
-        NAF.connection.sendData(8379079273475150, 'unreliableSend', '');
+        // NAF.connection.sendDataGuaranteed(8379079273475150, 'reliableSend', '');
+        // NAF.connection.sendData(8379079273475150, 'unreliableSend', '');
 
-        console.log("sending data", curr_frame_data);
-        let ws = new WebSocket('wss://10.38.151.146:8765'); 
-        // ws.binaryType = "arraybuffer"
-        ws.onopen = () => {
-            // console.log("sending data to server", new Date())
-            // const depth_json_string = JSON.stringify(depth_json_array);
-            ws.send(JSON.stringify(curr_frame_data));
-        };
+        if (curr_frame_data != prev_frame_data) {
+            // console.log("sending data", curr_frame_data);
+            let ws = new WebSocket('wss://10.38.151.146:8765'); 
+            // ws.binaryType = "arraybuffer"
+            ws.onopen = () => {
+                // console.log("sending data to server", new Date())
+                // const depth_json_string = JSON.stringify(depth_json_array);
+                ws.send(JSON.stringify(curr_frame_data));
+            };
+            prev_frame_data = curr_frame_data;
+        }
+
     }
 
     // Called by Networked-Aframe when connected to server
     function onConnect() {
         console.log("onConnect", new Date());
-        NAF.connection.subscribeToDataChannel('results', pushData);
+        // NAF.connection.subscribeToDataChannel('results', pushData);
         setInterval(send_data, 250);
     }
+    setInterval(send_data, 250);
+
 </script>
 </body>

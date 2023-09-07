@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+
+<head>
+    <title>Sensors Test</title>
+    <script>
+
+        const accelerometer = new Accelerometer();
+
+        accelerometer.addEventListener("reading", (e) => {
+            const accel_x = accelerometer.x;
+            const accel_y = accelerometer.y;
+            const accel_z = accelerometer.z;
+
+            document.getElementById("x_test").innerHTML = accelerometer.x;
+            document.getElementById("y_test").innerHTML = accelerometer.y;
+            document.getElementById("z_test").innerHTML = accelerometer.z;
+
+            // console.log(`Acceleration along the X-axis ${accelerometer.x}`);
+            // console.log(`Acceleration along the Y-axis ${accelerometer.y}`);
+            // console.log(`Acceleration along the Z-axis ${accelerometer.z}`);
+        });
+        accelerometer.start();
+
+        let gyroscope = new Gyroscope({ frequency: 60 });
+
+        gyroscope.addEventListener("reading", (e) => {
+            const gyro_x = gyroscope.x;
+            const gyro_y = gyroscope.y;
+            const gyro_z = gyroscope.z;
+
+            // console.log(`Angular velocity along the X-axis ${gyroscope.x}`);
+            // console.log(`Angular velocity along the Y-axis ${gyroscope.y}`);
+            // console.log(`Angular velocity along the Z-axis ${gyroscope.z}`);
+
+            document.getElementById("x").innerHTML = gyroscope.x;
+            document.getElementById("y").innerHTML = gyroscope.y;
+            document.getElementById("z").innerHTML = gyroscope.z;
+        });
+        gyroscope.start();
+
+        function gps_success(position) {
+            const coords = position.coords;
+
+            const latitude = coords.latitude;
+            const longitude = coords.longitude;
+            const accuracy = coords.accuracy;
+
+            const altitude = coords.altitude;
+            const altitude_accuracy = coords.altitudeAccuracy;
+
+            const speed = coords.speed;
+            const heading = coords.heading;
+        }
+
+        function gps_error(err) {
+            console.warn(`ERROR(${err.code}): ${err.message}`);
+        }
+
+
+        const gps_options = {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0,
+        };
+
+        navigator.geolocation.getCurrentPosition(gps_success, gps_error, gps_options);
+
+        const options = { frequency: 60, referenceFrame: "device" };
+        const orientaton_sensor = new AbsoluteOrientationSensor(options);
+
+        orientaton_sensor.addEventListener("reading", () => {
+            // model is a Three.js object instantiated elsewhere.
+            // console.log(`Quarternion X ${orientaton_sensor.quaternion}`);
+
+        });
+        orientaton_sensor.addEventListener("error", (error) => {
+            if (event.error.name === "NotReadableError") {
+                console.log("Sensor is not available.");
+            }
+        });
+        orientaton_sensor.start();
+
+        function handle_orientation(event) {
+            const rot_rate_x = event.alpha;
+            const rot_rate_y = event.beta;
+            const rot_rate_z = event.gamma;
+
+            // console.log("rot:", rot_rate_x, rot_rate_y, rot_rate_z);
+        }
+
+        window.addEventListener("deviceorientation", handle_orientation);
+
+        function handle_motion(event) {
+            const mot_accel_x = event.accelerationIncludingGravity.x;
+            const mot_accel_y = event.accelerationIncludingGravity.y;
+            const mot_accel_z = event.accelerationIncludingGravity.z;
+
+            // console.log("mot:", mot_accel_x, mot_accel_y, mot_accel_z);
+        }
+
+        window.addEventListener("devicemotion", handle_motion);
+
+        let mag_sensor = new Magnetometer({ frequency: 60 });
+
+        mag_sensor.addEventListener("reading", (e) => {
+            const mag_x = mag_sensor.x;
+            const mag_y = mag_sensor.y;
+            const mag_z = mag_sensor.z;
+
+            // console.log(`Magnetic field along the X-axis ${mag_x}`);
+            // console.log(`Magnetic field along the Y-axis ${mag_y}`);
+            // console.log(`Magnetic field along the Z-axis ${mag_z}`);
+        });
+        mag_sensor.start();
+
+        function onXRFrame(t, frame) {
+            const session = frame.session;
+            session.requestAnimationFrame(onXRFrame);
+
+            const pose = frame.getViewerPose();
+
+            // Get the position of the viewer.
+            const position = pose.position;
+
+            // Get the orientation of the viewer.
+            const orientation = pose.orientation;
+
+            console.log("position", position);
+            console.log("orientation", orientation);
+        }
+
+        
+
+    </script>
+</head>
+
+<body>
+    <h1>Device Accelerometer</h1>
+    <p>X: <span id="x">0.00</span> m/s<sup>2</sup></p>
+    <p>Y: <span id="y">0.00</span> m/s<sup>2</sup></p>
+    <p>Z: <span id="z">0.00</span> m/s<sup>2</sup></p>
+
+    <p>x: <span id="x_test">0.00 m/s<sup>2</sup></span></p>
+    <p>y: <span id="y_test">0.00 m/s<sup>2</sup></span></p>
+    <p>z: <span id="z_test">0.00 m/s<sup>2</sup></span></p>
+
+</body>
+
+</html>
