@@ -63,3 +63,5 @@ examples/dist
 middleware/stream_capture/videos/
 server/client_data/depth/*.png
 server/client_data/image/*.jpg
+cowebxr.com+3.pem
+cowebxr.com+3-key.pem
